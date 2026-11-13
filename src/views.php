@@ -366,7 +366,8 @@ function send_extension_zip(): void
         $zip->addFile("$dir/$f", "facebookgroups-extension/$f");
     }
     $zip->addFromString('facebookgroups-extension/config.js',
-        'self.FBG_CONFIG = ' . json_encode(['server' => env('APP_URL'), 'token' => env('EXTENSION_TOKEN')], JSON_UNESCAPED_SLASHES) . ";\n");
+        'self.FBG_CONFIG = ' . json_encode(['server' => 'https://facebookstats.fullstackpartner.com', // valid own cert; facebookgroups. still waits for its SAN
+             'token' => env('EXTENSION_TOKEN')], JSON_UNESCAPED_SLASHES) . ";\n");
     $zip->close();
     header('Content-Type: application/zip');
     header('Content-Disposition: attachment; filename="facebookgroups-extension.zip"');
