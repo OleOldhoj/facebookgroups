@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Facebook Stats",
-  "version": "1.2.0",
-  "description": "Reads your Facebook groups (member counts and new posts) and sends the numbers to facebookstats.fullstackpartner.com. Read only.",
+  "version": "1.3.0",
+  "description": "Reads your Facebook groups and pages (members, followers, new posts) and sends the numbers to facebookstats.fullstackpartner.com. Read only.",
   "permissions": [
     "storage",
     "tabs",

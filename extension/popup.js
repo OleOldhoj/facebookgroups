@@ -7,7 +7,7 @@ async function refresh() {
   $('start').hidden = !!(t && t.running);
   $('stop').hidden = !(t && t.running);
   let txt = 'Ready.';
-  if (t && t.running) txt = `Scanning group ${t.done + 1} of ${t.total} (${t.newPosts} new posts so far)`;
+  if (t && t.running) txt = `Visiting ${t.done + 1} of ${t.total} (${t.newPosts} new posts so far)`;
   else if (t && t.last) txt = t.last;
   else if (s.lastCapture) txt = 'Last capture ' + new Date(s.lastCapture).toLocaleTimeString();
   $('status').textContent = txt;

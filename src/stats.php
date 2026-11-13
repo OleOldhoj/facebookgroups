@@ -5,7 +5,7 @@
 declare(strict_types=1);
 
 const STATS_DAYS = 30;
-const STATS_PLUGIN_VERSION = '1.2.0';
+const STATS_PLUGIN_VERSION = '1.3.0';
 
 function stats_base(): string
 {
@@ -85,7 +85,27 @@ function stats_real(): array
     $s->execute([$from]);
     $cats = array_column($s->fetchAll(), 'n', 'c');
 
-    return ['demo' => false, 'days' => $days, 'groups' => $rows, 'authors' => $authors, 'categories' => $cats, 'ext_last_seen' => setting('ext_last_seen')];
+    return ['demo' => false, 'days' => $days, 'groups' => $rows, 'pages' => stats_pages_real($days), 'authors' => $authors, 'categories' => $cats, 'ext_last_seen' => setting('ext_last_seen')];
+}
+
+/** Pages you run or follow, with daily follower + like snapshots. */
+function stats_pages_real(array $days): array
+{
+    $snapF = $snapL = [];
+    foreach (db()->query('SELECT page_id, day, followers, likes FROM page_stats ORDER BY day') as $r) {
+        if ($r['followers'] !== null) $snapF[$r['page_id']][$r['day']] = (int)$r['followers'];
+        if ($r['likes'] !== null) $snapL[$r['page_id']][$r['day']] = (int)$r['likes'];
+    }
+    $rows = [];
+    foreach (db()->query('SELECT * FROM tracked_pages ORDER BY name') as $p) {
+        $rows[] = [
+            'id' => $p['id'], 'name' => $p['name'] ?: $p['id'], 'url' => $p['url'], 'kind' => $p['kind'],
+            'followers' => $p['followers'] !== null ? (int)$p['followers'] : null, 'likes' => $p['likes'] !== null ? (int)$p['likes'] : null,
+            'followers_series' => stats_carry($snapF[$p['id']] ?? [], $days), 'likes_series' => stats_carry($snapL[$p['id']] ?? [], $days),
+            'last_scan' => $p['last_scan_at'],
+        ];
+    }
+    return $rows;
 }
 
 /** Latest posts + top authors for one group (real data). */
@@ -152,8 +172,23 @@ function stats_demo(): array
         ['lead', 'Need someone to fix our Facebook ads, they stopped converting last month. Who can help?'],
     ];
     foreach ($samples as $k => [$c, $t]) $posts[] = ['author' => $people[$k * 2 % 12], 'text' => $t, 'url' => '', 'captured_at' => gmdate('Y-m-d H:i:s', time() - ($k + 1) * 4100), 'ai_category' => $c, 'ai_summary' => null];
+    $pages = [];
+    foreach ([['Full Stack Partner', 'own', 2400], ['Bubble Laundry Cebu', 'own', 8900], ['Calma Massage', 'own', 1350], ['Cebu Business Week', 'liked', 64000],
+        ['Startup Digest DK', 'liked', 21700], ['Laravel News', 'liked', 182000], ['Flutter Community', 'liked', 97500], ['Visit Cebu', 'liked', 410000]] as $i => [$name, $kind, $f]) {
+        $growth = mt_rand(kind_growth_min($kind), 60) / 10000;
+        $cur = $f / (1 + $growth) ** STATS_DAYS;
+        $fs = $ls = [];
+        foreach ($days as $d) { $cur *= 1 + $growth + mt_rand(-5, 5) / 100000; $fs[$d] = (int)round($cur); $ls[$d] = (int)round($cur * .82); }
+        $pages[] = ['id' => 'demo-page-' . ($i + 1), 'name' => $name, 'url' => '', 'kind' => $kind, 'followers' => end($fs), 'likes' => end($ls),
+            'followers_series' => $fs, 'likes_series' => $ls, 'last_scan' => gmdate('Y-m-d H:i:s', time() - mt_rand(900, 40000))];
+    }
     mt_srand();
-    return ['demo' => true, 'days' => $days, 'groups' => $rows, 'authors' => $authors, 'categories' => $cats, 'ext_last_seen' => null, 'demo_posts' => $posts];
+    return ['demo' => true, 'days' => $days, 'groups' => $rows, 'pages' => $pages, 'authors' => $authors, 'categories' => $cats, 'ext_last_seen' => null, 'demo_posts' => $posts];
+}
+
+function kind_growth_min(string $kind): int
+{
+    return $kind === 'own' ? 10 : -3;
 }
 
 // ---- small helpers --------------------------------------------------------
@@ -261,12 +296,12 @@ function stats_layout(string $title, array $data, string $body): void
     $flash = flash();
     echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
         . '<title>' . h($title) . ' | Facebook Stats</title><meta name="description" content="Member growth, activity and top posters across all your Facebook groups.">'
-        . '<link rel="icon" href="/assets/icon.svg"><link rel="stylesheet" href="/assets/app.css?v=1"><link rel="stylesheet" href="/assets/stats.css?v=2"></head><body>'
+        . '<link rel="icon" href="/assets/icon.svg"><link rel="stylesheet" href="/assets/app.css?v=1"><link rel="stylesheet" href="/assets/stats.css?v=3"></head><body>'
         . '<header class="top"><div class="wrap"><a class="brand" href="' . ($base ?: '/') . '"><img src="/assets/icon.svg" alt=""> Facebook Stats</a><nav></nav><div class="actions">' . $right . '</div></div></header><main class="wrap">';
     if ($flash) echo '<div class="flash">' . h($flash) . '</div>';
-    if ($data['demo']) echo '<div class="card note demo-note"><b>Example data.</b> This is what the dashboard looks like with 12 groups. '
+    if ($data['demo']) echo '<div class="card note demo-note"><b>Example data.</b> This is what the dashboard looks like with 12 groups and 8 pages. '
         . (is_admin() ? 'Your own numbers are on <a href="' . ($base ?: '/') . '">Your groups</a>.' : 'The owner logs in to see their own groups.') . '</div>';
-    echo $body . '</main><script src="/assets/stats.js?v=2"></script></body></html>';
+    echo $body . '</main><script src="/assets/stats.js?v=3"></script></body></html>';
 }
 
 function view_stats(?array $data): void
@@ -274,10 +309,11 @@ function view_stats(?array $data): void
     $data ??= stats_real();
     $base = stats_base();
     $groups = $data['groups'];
+    $pages = $data['pages'] ?? [];
     $days = $data['days'];
 
-    if (!$groups) {
-        $out = plugin_card(true) . '<p class="center"><a class="btn" href="' . $base . '/demo">See what it looks like with 12 groups</a></p>';
+    if (!$groups && !$pages) {
+        $out = plugin_card(true) . '<p class="center"><a class="btn" href="' . $base . '/demo">See what it looks like with 12 groups and 8 pages</a></p>';
         stats_layout('Overview', $data, $out);
         return;
     }
@@ -299,16 +335,33 @@ function view_stats(?array $data): void
     $d30 = member_delta($totalSeries, STATS_DAYS - 1);
     $active = count(array_filter($groups, fn($g) => $g['posts7'] > 0));
 
-    $out = plugin_card(false) . '<div class="head"><h1>All your groups</h1><span class="muted">Last ' . STATS_DAYS . ' days'
+    $fSeries = [];
+    foreach ($days as $d) {
+        $sum = null;
+        foreach ($pages as $pg) if (($v = $pg['followers_series'][$d]) !== null) $sum = ($sum ?? 0) + $v;
+        $fSeries[$d] = $sum;
+    }
+    $followers = array_sum(array_map(fn($pg) => (int)$pg['followers'], $pages));
+    $own = count(array_filter($pages, fn($pg) => $pg['kind'] === 'own'));
+
+    $out = plugin_card(false) . '<div class="head"><h1>All your groups and pages</h1><span class="muted">Last ' . STATS_DAYS . ' days'
         . ($data['ext_last_seen'] ? ' · extension last seen ' . h(ago($data['ext_last_seen'])) : '') . '</span></div>';
     $out .= '<div class="tiles">'
         . tile('Groups', number_format(count($groups)), $active . ' active this week')
         . tile('Members, all groups', $known ? fmt_n($members) : '–', $known ? fmt_delta($d30) . ' in 30 days' : 'not recorded yet')
         . tile('Posts this week', number_format($p7), $prev7 ? fmt_delta($p7 - $prev7) . ' vs last week' : 'last 7 days')
-        . tile('Posts, 30 days', number_format($p30), round($p30 / STATS_DAYS, 1) . ' per day')
         . tile('Leads found', number_format($leads), 'AI: lead or opportunity')
+        . tile('Pages', number_format(count($pages)), $own . ' yours, ' . (count($pages) - $own) . ' followed')
+        . tile('Followers, all pages', $followers ? fmt_n($followers) : '–', $followers ? fmt_delta(member_delta($fSeries, STATS_DAYS - 1)) . ' in 30 days' : 'not recorded yet')
         . '</div>';
+    if ($groups) $out .= stats_groups_html($data, $groups, $postsSeries, $totalSeries, $base);
+    if ($pages) $out .= stats_pages_html($pages, $fSeries, $base);
+    stats_layout('Overview', $data, $out);
+}
 
+function stats_groups_html(array $data, array $groups, array $postsSeries, array $totalSeries, string $base): string
+{
+    $out = '<h2 class="h">Groups <span class="muted">' . count($groups) . '</span></h2>';
     $out .= '<div class="grid2"><section class="card"><h2>Posts per day</h2><p class="muted">Counted on the day the extension first saw them.</p>' . svg_bars($postsSeries, 'Posts per day, all groups') . '</section>'
         . '<section class="card"><h2>Members, all groups</h2><p class="muted">From the member count in each group\'s header.</p>' . svg_line($totalSeries, 'Total members over time') . '</section></div>';
 
@@ -336,7 +389,62 @@ function view_stats(?array $data): void
     $out .= '</tbody></table></div></section>';
 
     $out .= '<div class="grid2">' . authors_card($data['authors'], 'Top posters across your groups') . categories_card($data['categories']) . '</div>';
-    stats_layout('Overview', $data, $out);
+    return $out;
+}
+
+function stats_pages_html(array $pages, array $fSeries, string $base): string
+{
+    $out = '<h2 class="h">Pages <span class="muted">' . count($pages) . '</span></h2>';
+    $growth = [];
+    foreach ($pages as $pg) if (($d = member_delta($pg['followers_series'], STATS_DAYS - 1)) !== null) $growth[] = ['author' => $pg['name'], 'n' => $d];
+    usort($growth, fn($a, $b) => $b['n'] <=> $a['n']);
+    $growth = array_values(array_filter(array_slice($growth, 0, 8), fn($g) => $g['n'] > 0));
+    $out .= '<div class="grid2"><section class="card"><h2>Followers, all pages</h2><p class="muted">From the follower count in each page\'s header.</p>' . svg_line($fSeries, 'Total followers over time') . '</section>'
+        . authors_card($growth, 'Most new followers, 30 days', true) . '</div>';
+    $out .= '<section class="card"><h2>Every page <span class="muted">' . count($pages) . ' · click a column to sort</span></h2><div class="table"><table class="sortable"><thead><tr>'
+        . '<th data-t="s">Page</th><th data-t="n" class="num">Followers</th><th data-t="n" class="num">7 days</th><th data-t="n" class="num">30 days</th>'
+        . '<th data-t="n" class="num">Likes</th><th data-t="n">Last scanned</th></tr></thead><tbody>';
+    usort($pages, fn($a, $b) => [$a['kind'] !== 'own', -(int)$a['followers']] <=> [$b['kind'] !== 'own', -(int)$b['followers']]);
+    foreach ($pages as $pg) {
+        $d7 = member_delta($pg['followers_series'], 7);
+        $d30 = member_delta($pg['followers_series'], STATS_DAYS - 1);
+        $ls = $pg['last_scan'] ? strtotime($pg['last_scan'] . ' UTC') : 0;
+        $out .= '<tr><td data-v="' . h(mb_strtolower($pg['name'])) . '"><a href="' . $base . '/page/' . rawurlencode($pg['id']) . '">' . h($pg['name']) . '</a> '
+            . ($pg['kind'] === 'own' ? '<span class="tag ok">yours</span>' : '<span class="tag">followed</span>') . '</td>'
+            . '<td class="num" data-v="' . (int)$pg['followers'] . '">' . fmt_n($pg['followers']) . '</td>'
+            . '<td class="num" data-v="' . (int)$d7 . '">' . fmt_delta($d7) . '</td>'
+            . '<td class="num" data-v="' . (int)$d30 . '">' . fmt_delta($d30) . '</td>'
+            . '<td class="num" data-v="' . (int)$pg['likes'] . '">' . fmt_n($pg['likes']) . '</td>'
+            . '<td class="muted" data-v="' . $ls . '">' . h($pg['last_scan'] ? ago($pg['last_scan']) : 'not yet') . '</td></tr>';
+    }
+    return $out . '</tbody></table></div></section>';
+}
+
+function view_stats_page(string $id, ?array $data): void
+{
+    $data ??= stats_real();
+    $base = stats_base();
+    $pg = null;
+    foreach ($data['pages'] as $row) if ($row['id'] === $id) $pg = $row;
+    if (!$pg) {
+        http_response_code(404);
+        stats_layout('Not found', $data, '<div class="empty">That page is not in your list. <a href="' . ($base ?: '/') . '">Back</a></div>');
+        return;
+    }
+    $back = $data['demo'] && is_admin() ? $base . '/demo' : ($base ?: '/');
+    $out = '<p><a href="' . $back . '">← All groups and pages</a></p>'
+        . '<div class="head"><h1>' . h($pg['name']) . '</h1>' . ($pg['kind'] === 'own' ? '<span class="tag ok">yours</span>' : '<span class="tag">followed</span>')
+        . ($pg['url'] ? ' <a class="btn small" href="' . h($pg['url']) . '" target="_blank" rel="noopener">Open on Facebook</a>' : '') . '</div>';
+    $out .= '<div class="tiles">'
+        . tile('Followers', fmt_n($pg['followers']), fmt_delta(member_delta($pg['followers_series'], STATS_DAYS - 1)) . ' in 30 days')
+        . tile('This week', fmt_delta(member_delta($pg['followers_series'], 7)), 'new followers')
+        . tile('Likes', fmt_n($pg['likes']), fmt_delta(member_delta($pg['likes_series'], STATS_DAYS - 1)) . ' in 30 days')
+        . tile('Last scanned', h($pg['last_scan'] ? ago($pg['last_scan']) : 'not yet'), 'by the Chrome plugin')
+        . '</div>';
+    $out .= '<div class="grid2"><section class="card"><h2>Followers</h2>' . svg_line($pg['followers_series'], 'Followers over time') . '</section>'
+        . '<section class="card"><h2>Likes</h2>' . svg_line($pg['likes_series'], 'Likes over time') . '</section></div>';
+    if ($pg['kind'] === 'own') $out .= '<div class="card note">Reach, impressions and post engagement for pages you run need Facebook\'s page insights, which only work with your own Facebook app connected on the posts dashboard.</div>';
+    stats_layout($pg['name'], $data, $out);
 }
 
 /**
@@ -348,21 +456,21 @@ function plugin_card(bool $noGroups): string
     return '<section class="card plugin" id="plugin" data-need="' . STATS_PLUGIN_VERSION . '"' . ($noGroups ? ' data-nogroups="1"' : '') . '>'
         . '<div id="plugin-missing"' . ($noGroups ? '' : ' hidden') . '><div class="plugin-grid"><div>'
         . '<h1>Install the Chrome plugin</h1>'
-        . '<p>Facebook does not let any website read groups, not even with Login with Facebook. A small Chrome plugin reads your groups while you are logged in to Facebook and sends the numbers here. It only reads: it never posts, likes or comments.</p>'
+        . '<p>Facebook does not let any website read groups, not even with Login with Facebook. A small Chrome plugin reads your groups and pages while you are logged in to Facebook and sends the numbers here. It only reads: it never posts, likes or comments.</p>'
         . '<ol class="steps">'
         . '<li><a class="btn primary" href="/extension.zip">Download the plugin</a> and unzip it.</li>'
         . '<li>Open <code>chrome://extensions</code>, turn on <b>Developer mode</b> (top right).</li>'
         . '<li>Click <b>Load unpacked</b> and pick the unzipped folder.</li>'
-        . '<li>Come back to this page and press <b>Import my groups</b>, then <b>Scan now</b>.</li>'
+        . '<li>Come back to this page and press <b>Scan now</b>. It finds all your groups and pages by itself.</li>'
         . '</ol><p class="muted">After the first scan it updates by itself once a day while Chrome is open.</p></div>'
-        . '<video class="howto" src="/assets/howto.mp4" poster="/assets/howto.jpg" controls playsinline preload="none"></video></div></div>'
+        . '<video class="howto" src="/assets/howto.mp4?v=2" poster="/assets/howto.jpg?v=2" controls playsinline preload="none"></video></div></div>'
         . '<div id="plugin-old" hidden><b>Your plugin is out of date.</b> <a href="/extension.zip">Download the new version</a>, remove the old one in <code>chrome://extensions</code> and load the new folder.</div>'
         . '<div id="plugin-ok" hidden><div class="plugin-row"><span class="tag ok">Plugin installed</span> <span id="plugin-status" class="muted"></span>'
-        . '<span class="grow"></span><button id="btn-import" type="button">Import my groups</button><button id="btn-scan" type="button" class="primary">Scan now</button></div></div>'
+        . '<span class="grow"></span><button id="btn-scan" type="button" class="primary">Scan now</button></div></div>'
         . '</section>';
 }
 
-function authors_card(array $authors, string $title): string
+function authors_card(array $authors, string $title, bool $plus = false): string
 {
     $out = '<section class="card"><h2>' . h($title) . '</h2>';
     if (!$authors) return $out . '<div class="empty small">No posts in the last ' . STATS_DAYS . ' days.</div></section>';
@@ -370,7 +478,7 @@ function authors_card(array $authors, string $title): string
     $out .= '<ol class="hbars">';
     foreach ($authors as $a) {
         $out .= '<li><span class="hl">' . h($a['author']) . (isset($a['g']) && $a['g'] > 1 ? ' <span class="muted">in ' . (int)$a['g'] . ' groups</span>' : '') . '</span>'
-            . '<span class="hb"><i style="width:' . round(100 * $a['n'] / $max) . '%"></i></span><span class="hn">' . (int)$a['n'] . '</span></li>';
+            . '<span class="hb"><i style="width:' . round(100 * $a['n'] / $max) . '%"></i></span><span class="hn">' . ($plus ? '+' . fmt_n((int)$a['n']) : (int)$a['n']) . '</span></li>';
     }
     return $out . '</ol></section>';
 }

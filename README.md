@@ -17,3 +17,7 @@ Visitors see fixed example data; the owner (same URL login) sees their own group
 top posters, AI categories, per-group pages at `/group/<id>`. Extension 1.1 reads "N members" + public/private from the
 group header and the server keeps one snapshot per group per day in `group_stats`. Posts are dated by first capture.
 Own LE cert (webroot), nginx `conf.d/facebookstats.fullstackpartner.com.conf`.
+
+Pages (plugin 1.3): the scan first visits groups/joins and pages/?category=your_pages + ?category=liked, then every group and page
+from `/api/targets`, oldest scan first. Page header gives followers + likes -> `tracked_pages` + `page_stats` (one row per day).
+Page ids: lower-case username or `id:<number>`. Only pages found in those lists are tracked; random profile visits are ignored.

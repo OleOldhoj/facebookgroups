@@ -9,7 +9,7 @@ require __DIR__ . '/../src/videos.php';
 require __DIR__ . '/../src/stats.php';
 require __DIR__ . '/../src/views.php';
 
-$path = rtrim(parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH), '/') ?: '/';
+$path = rtrim(rawurldecode(strtok($_SERVER['REQUEST_URI'] ?? '/', '?') ?: '/'), '/') ?: '/';
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
 // ---- extension API (token auth, no session) -------------------------------
@@ -22,6 +22,13 @@ if (str_starts_with($path, '/api/')) {
     }
     if ($path === '/api/groups') {
         exit(json_encode(['groups' => db()->query('SELECT id, name, url, last_scan_at FROM groups ORDER BY last_scan_at IS NOT NULL, last_scan_at')->fetchAll()]));
+    }
+    if ($path === '/api/targets') {
+        // What one scan visits: every group and every tracked page, the ones scanned longest ago first.
+        $t = db()->query("SELECT url FROM (
+            SELECT 'https://www.facebook.com/groups/' || id || '/?sorting_setting=CHRONOLOGICAL' url, last_scan_at FROM groups
+            UNION ALL SELECT url, last_scan_at FROM tracked_pages) ORDER BY last_scan_at IS NOT NULL, last_scan_at")->fetchAll(PDO::FETCH_COLUMN);
+        exit(json_encode(['targets' => $t], JSON_UNESCAPED_SLASHES));
     }
     if ($path === '/api/capture' && $method === 'POST') {
         $in = json_decode(file_get_contents('php://input'), true) ?: [];
@@ -54,11 +61,35 @@ if (str_starts_with($path, '/api/')) {
             $ext = (string)($post['ext_id'] ?? '') ?: 'h' . substr(sha1($gid . '|' . mb_substr($text, 0, 300)), 0, 20);
             $p += save_post('group', $gid, $gname ?: $gid, mb_substr($ext, 0, 80), mb_substr(trim((string)($post['author'] ?? '')), 0, 120), $text, $url, null);
         }
+        // Pages from the lists "Your pages" and "Liked": own wins over liked.
+        $pg = 0;
+        $pageUp = db()->prepare("INSERT INTO tracked_pages(id, name, url, kind, created_at) VALUES(?,?,?,?,?)
+            ON CONFLICT(id) DO UPDATE SET name = COALESCE(NULLIF(excluded.name, ''), tracked_pages.name),
+            kind = CASE WHEN excluded.kind = 'own' THEN 'own' ELSE tracked_pages.kind END");
+        foreach (array_slice((array)($in['pages'] ?? []), 0, 1000) as $page) {
+            $id = clean_page_id((string)($page['id'] ?? ''));
+            if ($id === '') continue;
+            $pageUp->execute([$id, mb_substr(trim((string)($page['name'] ?? '')), 0, 200), page_url($id), ($page['kind'] ?? '') === 'own' ? 'own' : 'liked', now()]);
+            $pg++;
+        }
+        // A visit to a page we track: followers + likes, one snapshot per day.
+        if (is_array($v = $in['page_visit'] ?? null) && ($id = clean_page_id((string)($v['id'] ?? ''))) !== '') {
+            $f = (int)($v['followers'] ?? 0); $l = (int)($v['likes'] ?? 0);
+            $f = $f > 0 && $f < 5000000000 ? $f : null; $l = $l > 0 && $l < 5000000000 ? $l : null;
+            $name = mb_substr(trim((string)($v['name'] ?? '')), 0, 200);
+            $s = db()->prepare("UPDATE tracked_pages SET followers = COALESCE(?, followers), likes = COALESCE(?, likes), name = COALESCE(NULLIF(?, ''), name), last_scan_at = ? WHERE id = ?");
+            $s->execute([$f, $l, $name, now(), $id]);
+            if ($s->rowCount() && ($f || $l)) {
+                db()->prepare('INSERT INTO page_stats(page_id, day, followers, likes) VALUES(?,?,?,?)
+                    ON CONFLICT(page_id, day) DO UPDATE SET followers = COALESCE(excluded.followers, page_stats.followers), likes = COALESCE(excluded.likes, page_stats.likes)')
+                    ->execute([$id, gmdate('Y-m-d'), $f, $l]);
+            }
+        }
         if (!empty($in['scanned_group'])) {
             db()->prepare('UPDATE groups SET last_scan_at = ? WHERE id = ?')->execute([now(), (string)$in['scanned_group']]);
         }
         set_setting('ext_last_seen', now());
-        exit(json_encode(['ok' => true, 'groups' => $g, 'new_posts' => $p]));
+        exit(json_encode(['ok' => true, 'groups' => $g, 'pages' => $pg, 'new_posts' => $p]));
     }
     http_response_code(404);
     exit(json_encode(['error' => 'not found']));
@@ -99,6 +130,13 @@ if (is_stats_host() || $path === '/stats' || str_starts_with($path, '/stats/')) 
     if (preg_match('#^/group/([\w.\-]+)$#', $sub, $m)) {
         if (str_starts_with($m[1], 'demo-')) view_stats_group($m[1], stats_demo());
         elseif (is_admin()) view_stats_group($m[1], null);
+        else redirect('/login');
+        exit;
+    }
+    if (preg_match('#^/page/([\w.:%\-]+)$#', $sub, $m)) {
+        $pid = rawurldecode($m[1]);
+        if (str_starts_with($pid, 'demo-page-')) view_stats_page($pid, stats_demo());
+        elseif (is_admin()) view_stats_page($pid, null);
         else redirect('/login');
         exit;
     }

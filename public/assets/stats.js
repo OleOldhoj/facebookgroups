@@ -37,11 +37,10 @@ document.querySelectorAll('table.sortable').forEach((t) => {
     if (e.data.type === 'status' && e.data.status) {
       const t = e.data.status.tour, last = e.data.status.lastCapture;
       $('btn-scan').disabled = !!(t && t.running);
-      $('plugin-status').textContent = t && t.running ? `Scanning group ${t.done + 1} of ${t.total}, ${t.newPosts} new posts so far. Reload the page when it is done.`
+      $('plugin-status').textContent = t && t.running ? `Visiting ${t.done + 1} of ${t.total}, ${t.newPosts} new posts so far. Reload the page when it is done.`
         : t && t.last ? t.last : last ? 'Last data sent ' + new Date(last).toLocaleString() : 'No data sent yet.';
     }
   });
   $('btn-scan').onclick = () => { $('plugin-status').textContent = 'Starting...'; send('scan'); };
-  $('btn-import').onclick = () => send('import');
   setTimeout(show, 600);
 })();

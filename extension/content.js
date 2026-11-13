@@ -1,4 +1,4 @@
-// Runs on facebook.com. Reads posts that are on screen (groups only) and hands them to background.js.
+// Runs on facebook.com. Reads group posts on screen, group member counts and page follower counts, and hands them to background.js.
 // Read only: never posts, likes or comments. Facebook's markup changes often, so every selector has a fallback.
 (() => {
   const RESERVED = new Set(['feed', 'discover', 'joins', 'create', 'notifications', 'search', 'you', 'your_groups', 'learn', 'categories', 'requests']);
@@ -20,19 +20,25 @@
     return { id, name, ...groupHeader() };
   }
 
+  const headText = () => ((document.querySelector('[role="main"]') || document.body).innerText || '').slice(0, 3000);
+
+  // "12.3K members", "1,2 t. medlemmer", "845 followers": the number in front of one of the words.
+  function countBefore(head, words) {
+    const m = head.match(new RegExp('(\\d[\\d.,\\s]*)\\s*(k|m|t\\.|tusind|mio\\.?|million(?:er)?)?\\s*(?:' + words + ')(?![\\wæøå])', 'i'));
+    if (!m) return null;
+    const unit = (m[2] || '').toLowerCase();
+    const mult = /^(k|t\.|tusind)$/.test(unit) ? 1e3 : unit ? 1e6 : 1;
+    const raw = m[1].replace(/\s/g, '');
+    const n = mult > 1 ? parseFloat(raw.replace(',', '.')) * mult : parseInt(raw.replace(/[.,]/g, ''), 10);
+    return n > 0 && n < 5e9 ? Math.round(n) : null;
+  }
+
   // "Public group · 12.3K members" / "Privat gruppe · 1,2 t. medlemmer" in the group header.
   function groupHeader() {
-    const main = document.querySelector('[role="main"]') || document.body;
-    const head = (main.innerText || '').slice(0, 3000);
+    const head = headText();
     const out = {};
-    const m = head.match(/(\d[\d.,\s]*)\s*(k|m|t\.|tusind|mio\.?|million(?:er)?)?\s*(?:members|medlemmer|medlem)\b/i);
-    if (m) {
-      const unit = (m[2] || '').toLowerCase();
-      const mult = /^(k|t\.|tusind)$/.test(unit) ? 1e3 : unit ? 1e6 : 1;
-      const raw = m[1].replace(/\s/g, '');
-      const n = mult > 1 ? parseFloat(raw.replace(',', '.')) * mult : parseInt(raw.replace(/[.,]/g, ''), 10);
-      if (n > 0 && n < 5e8) out.members = Math.round(n);
-    }
+    const members = countBefore(head, 'members|medlemmer|medlem');
+    if (members) out.members = members;
     const p = head.match(/\b(public|private|offentlig|privat)\s+(?:group|gruppe)/i);
     if (p) out.privacy = /^(public|offentlig)$/i.test(p[1]) ? 'public' : 'private';
     return out;
@@ -92,6 +98,51 @@
   }
 
   // facebook.com/groups/joins lists every group you are in.
+  // ---- pages ----
+  const NOT_PAGES = new Set(['groups', 'pages', 'watch', 'marketplace', 'events', 'gaming', 'friends', 'settings', 'help', 'notifications', 'messages',
+    'bookmarks', 'saved', 'memories', 'search', 'stories', 'reel', 'reels', 'photo', 'photo.php', 'photos', 'videos', 'hashtag', 'login', 'privacy',
+    'policies', 'ads', 'business', 'fundraisers', 'jobs', 'live', 'news', 'feeds', 'home.php', 'me', 'share', 'sharer', 'story.php', 'permalink.php',
+    'l.php', 'checkpoint', 'recover', 'places', 'media', 'latest', 'dialog', 'plugins', 'composer', 'onthisday', 'weather', 'crisisresponse']);
+
+  // Page id from a facebook.com URL: "id:123" for profile.php?id= and /people/Name/123, otherwise the lower-case username.
+  function pageFromUrl(u) {
+    if (!/(^|\.)facebook\.com$/.test(u.hostname)) return null;
+    const segs = u.pathname.split('/').filter(Boolean);
+    if (u.pathname === '/profile.php' && /^\d+$/.test(u.searchParams.get('id') || '')) return 'id:' + u.searchParams.get('id');
+    if (segs[0] === 'people' && /^\d+$/.test(segs[2] || '')) return 'id:' + segs[2];
+    if (segs.length === 1 && /^[\w.\-]{3,80}$/.test(segs[0]) && !NOT_PAGES.has(segs[0].toLowerCase())) return segs[0].toLowerCase();
+    return null;
+  }
+  const pageUrl = (id) => id.startsWith('id:') ? 'https://www.facebook.com/profile.php?id=' + id.slice(3) : 'https://www.facebook.com/' + id;
+
+  function pageHere() {
+    const id = pageFromUrl(location);
+    if (!id) return null;
+    const head = headText();
+    const followers = countBefore(head, 'followers|følgere|follower|følger');
+    const likes = countBefore(head, 'likes|synes godt om');
+    if (!followers && !likes) return null; // a person, or not loaded yet
+    const h1 = document.querySelector('[role="main"] h1') || document.querySelector('h1');
+    return { id, name: h1 ? h1.innerText.trim().split('\n')[0] : '', url: pageUrl(id), followers, likes };
+  }
+
+  // facebook.com/pages/?category=your_pages (pages you run) and ?category=liked (pages you like or follow).
+  let pagesFound = new Map();
+  function scanPageList() {
+    if (!location.pathname.startsWith('/pages')) return;
+    const cat = new URLSearchParams(location.search).get('category') || '';
+    const kind = /your_pages|managed/.test(cat) ? 'own' : 'liked';
+    for (const a of (document.querySelector('[role="main"]') || document).querySelectorAll('a[href]')) {
+      let u;
+      try { u = new URL(a.href, location.href); } catch (e) { continue; }
+      const id = pageFromUrl(u);
+      const name = a.innerText.trim().split('\n')[0];
+      if (id && name.length > 1 && name.length < 120 && !/^(see all|se alle|like|synes godt om|follow|følg)$/i.test(name)) {
+        if (!pagesFound.has(id)) pagesFound.set(id, { id, name, url: pageUrl(id), kind });
+      }
+    }
+  }
+
   function scanGroupList() {
     if (!location.pathname.startsWith('/groups/joins')) return;
     for (const a of document.querySelectorAll('a[href*="/groups/"]')) {
@@ -112,14 +163,15 @@
   }
 
   function flush(extra = {}) {
-    if (!posts.length && !groups.size && !extra.scanned_group) return Promise.resolve();
-    const payload = { groups: [...groups.values()], posts, ...extra };
+    if (!posts.length && !groups.size && !pagesFound.size && !extra.scanned_group && !extra.page_visit) return Promise.resolve();
+    const payload = { groups: [...groups.values()], posts, pages: [...pagesFound.values()], ...extra };
     groups = new Map();
+    pagesFound = new Map();
     posts = [];
     return chrome.runtime.sendMessage({ type: 'capture', payload }).catch(() => {});
   }
 
-  const tick = () => { scanGroupList(); scanPosts(); flush(); };
+  const tick = () => { scanGroupList(); scanPageList(); scanPosts(); flush(); };
   let timer;
   new MutationObserver(() => { clearTimeout(timer); timer = setTimeout(tick, 2500); }).observe(document.body, { childList: true, subtree: true });
   setTimeout(tick, 3000);
@@ -129,7 +181,17 @@
     if (isScan !== true) return;
     const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     await wait(4000);
-    for (let i = 0; i < 8; i++) {
+    // A page: the header is all we need.
+    if (!location.pathname.startsWith('/groups') && !location.pathname.startsWith('/pages')) {
+      let pg = pageHere();
+      if (!pg) { await wait(3000); pg = pageHere(); }
+      const id = pageFromUrl(location);
+      await flush(id ? { page_visit: pg || { id }, scanned_page: id } : {});
+      chrome.runtime.sendMessage({ type: 'scanDone' });
+      return;
+    }
+    const screens = location.pathname.startsWith('/groups/joins') || location.pathname.startsWith('/pages') ? 15 : 8;
+    for (let i = 0; i < screens; i++) {
       expandSeeMore();
       window.scrollBy(0, window.innerHeight * 1.5);
       await wait(2200 + Math.random() * 1500);
@@ -137,6 +199,7 @@
     expandSeeMore();
     await wait(1500);
     scanGroupList();
+    scanPageList();
     scanPosts();
     const here = pageGroup();
     await flush(here ? { scanned_group: here.id } : {});

@@ -1,5 +1,5 @@
 // Runs only on facebookstats.fullstackpartner.com: tells the page the plugin is installed,
-// and lets the page's "Scan now" / "Import my groups" buttons start a scan. Nothing else.
+// and lets the page's "Scan now" button start a scan. Nothing else.
 (() => {
   const ver = chrome.runtime.getManifest().version;
   document.documentElement.dataset.fbgExt = ver;
@@ -8,7 +8,6 @@
   window.addEventListener('message', (e) => {
     if (e.source !== window || e.origin !== location.origin || !e.data || e.data.from !== 'fbg-page') return;
     if (e.data.type === 'scan') chrome.runtime.sendMessage({ type: 'start' }).then((r) => post({ type: 'started', error: r && r.error })).then(status);
-    if (e.data.type === 'import') chrome.runtime.sendMessage({ type: 'import' }).then(status);
     if (e.data.type === 'status') status();
   });
   post({ type: 'hello', version: ver });

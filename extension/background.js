@@ -26,24 +26,40 @@ async function api(path, body) {
 async function tour() { return (await chrome.storage.session.get('tour')).tour || null; }
 async function saveTour(t) { await chrome.storage.session.set({ tour: t }); }
 
+// One scan = the lists of your groups and pages (to find new ones), then every group and page, oldest first.
+const LISTS = [
+  'https://www.facebook.com/groups/joins/',
+  'https://www.facebook.com/pages/?category=your_pages',
+  'https://www.facebook.com/pages/?category=liked',
+];
+
+async function targets() {
+  try { return (await api('/api/targets')).targets || []; }
+  catch (e) { return (await api('/api/groups')).groups.map((g) => 'https://www.facebook.com/groups/' + encodeURIComponent(g.id) + '/?sorting_setting=CHRONOLOGICAL'); }
+}
+
 async function startTour() {
-  const { groups } = await api('/api/groups');
-  if (!groups.length) throw new Error('No groups yet. Open facebook.com/groups/joins first.');
   const win = await chrome.windows.create({ url: 'about:blank', focused: false, width: 900, height: 900 });
   await chrome.storage.local.set({ lastTourStart: Date.now() });
-  await saveTour({ running: true, queue: groups.map((g) => g.id), total: groups.length, done: 0, newPosts: 0, windowId: win.id, tabId: win.tabs[0].id, current: null });
+  await saveTour({ running: true, queue: [...LISTS, 'REFRESH'], total: LISTS.length, done: 0, newPosts: 0, windowId: win.id, tabId: win.tabs[0].id, current: null });
   next();
 }
 
 async function next() {
   const t = await tour();
   if (!t || !t.running) return;
-  const gid = t.queue.shift();
-  if (!gid) return stopTour('Done: ' + t.done + ' groups, ' + t.newPosts + ' new posts');
-  t.current = gid;
+  let url = t.queue.shift();
+  if (url === 'REFRESH') {
+    const list = await targets().catch(() => []);
+    t.queue.push(...list);
+    t.total = t.done + list.length;
+    url = t.queue.shift();
+  }
+  if (!url) return stopTour('Done: ' + t.done + ' visited, ' + t.newPosts + ' new posts');
+  t.current = url;
   await saveTour(t);
   try {
-    await chrome.tabs.update(t.tabId, { url: 'https://www.facebook.com/groups/' + encodeURIComponent(gid) + '/?sorting_setting=CHRONOLOGICAL' });
+    await chrome.tabs.update(t.tabId, { url });
   } catch (e) {
     return stopTour('Scan window was closed');
   }
@@ -99,7 +115,6 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
       return true;
     }
     if (msg.type === 'start') { await startTour(); return true; }
-    if (msg.type === 'import') { await chrome.tabs.create({ url: 'https://www.facebook.com/groups/joins/' }); return true; }
     if (msg.type === 'stop') { await stopTour('Stopped'); return true; }
     if (msg.type === 'status') return { tour: await tour(), ...(await chrome.storage.local.get(['lastCapture', 'lastResult'])) };
   })().then(reply, (e) => reply({ error: e.message }));

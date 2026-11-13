@@ -54,6 +54,10 @@ function migrate(PDO $pdo): void
     CREATE INDEX IF NOT EXISTS posts_seen ON posts(seen, captured_at);
     CREATE INDEX IF NOT EXISTS posts_source ON posts(source, source_id, captured_at);
     CREATE TABLE IF NOT EXISTS group_stats (group_id TEXT NOT NULL, day TEXT NOT NULL, members INTEGER, PRIMARY KEY(group_id, day));
+    CREATE TABLE IF NOT EXISTS tracked_pages (
+        id TEXT PRIMARY KEY, name TEXT, url TEXT, kind TEXT DEFAULT 'liked', followers INTEGER, likes INTEGER, created_at TEXT, last_scan_at TEXT
+    );
+    CREATE TABLE IF NOT EXISTS page_stats (page_id TEXT NOT NULL, day TEXT NOT NULL, followers INTEGER, likes INTEGER, PRIMARY KEY(page_id, day));
     CREATE TABLE IF NOT EXISTS login_attempts (ip TEXT, at INTEGER);
     CREATE TABLE IF NOT EXISTS log (id INTEGER PRIMARY KEY, at TEXT, kind TEXT, msg TEXT);
     CREATE TABLE IF NOT EXISTS moderation (
@@ -208,4 +212,16 @@ function flash(?string $msg = null): ?string
     $m = $_SESSION['flash'] ?? null;
     unset($_SESSION['flash']);
     return $m;
+}
+
+/** "id:123" (numeric profile id) or a lower-case Facebook username, else ''. */
+function clean_page_id(string $id): string
+{
+    $id = strtolower(trim($id));
+    return preg_match('/^(id:\d{1,25}|[\w.\-]{3,80})$/', $id) ? $id : '';
+}
+
+function page_url(string $id): string
+{
+    return str_starts_with($id, 'id:') ? 'https://www.facebook.com/profile.php?id=' . substr($id, 3) : 'https://www.facebook.com/' . $id;
 }
