@@ -35,3 +35,6 @@ chrome.storage.local.get(['server', 'token']).then((s) => {
 });
 refresh();
 setInterval(refresh, 2000);
+
+chrome.storage.local.get('autoScan').then((s) => { $('auto').checked = s.autoScan !== false; });
+$('auto').onchange = () => chrome.storage.local.set({ autoScan: $('auto').checked });

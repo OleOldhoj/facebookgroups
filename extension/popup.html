@@ -10,12 +10,13 @@
   #status { min-height: 20px; }
 </style></head>
 <body>
-  <h1>Facebook Groups dashboard</h1>
+  <h1>Facebook Stats</h1>
   <p id="status">Loading...</p>
   <button id="start">Scan all my groups</button>
   <button id="stop" class="secondary" hidden>Stop scan</button>
-  <button id="open" class="secondary">Open dashboard</button>
-  <p>A small window opens and visits each group, one every 15 to 25 seconds. Leave it open until it closes by itself.</p>
+  <button id="open" class="secondary">Open my stats</button>
+  <p>A small window opens and visits each group, one every 15 to 25 seconds. Leave it open until it closes by itself. After the first scan it runs by itself once a day while Chrome is open.</p>
+  <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="auto" style="width:auto;margin:0"> Scan by itself once a day</label>
   <details><summary>Connection</summary>
     <label>Server<input id="server"></label>
     <label>Key<input id="token"></label>

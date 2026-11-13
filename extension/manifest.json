@@ -1,15 +1,52 @@
 {
   "manifest_version": 3,
-  "name": "Facebook Groups dashboard",
-  "version": "1.1.0",
-  "description": "Reads new posts in your Facebook groups and sends them to your facebookgroups.fullstackpartner.com dashboard.",
-  "permissions": ["storage", "tabs", "alarms"],
-  "host_permissions": ["https://facebookgroups.fullstackpartner.com/*", "https://facebookstats.fullstackpartner.com/*", "https://www.facebook.com/*"],
-  "background": { "service_worker": "background.js" },
-  "content_scripts": [{
-    "matches": ["https://www.facebook.com/*"],
-    "js": ["content.js"],
-    "run_at": "document_idle"
-  }],
-  "action": { "default_popup": "popup.html", "default_title": "Facebook Groups dashboard" }
+  "name": "Facebook Stats",
+  "version": "1.2.0",
+  "description": "Reads your Facebook groups (member counts and new posts) and sends the numbers to facebookstats.fullstackpartner.com. Read only.",
+  "permissions": [
+    "storage",
+    "tabs",
+    "alarms"
+  ],
+  "host_permissions": [
+    "https://facebookgroups.fullstackpartner.com/*",
+    "https://facebookstats.fullstackpartner.com/*",
+    "https://www.facebook.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.facebook.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://facebookstats.fullstackpartner.com/*"
+      ],
+      "js": [
+        "bridge.js"
+      ],
+      "run_at": "document_start"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Facebook Stats",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png"
+    }
+  },
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
 }

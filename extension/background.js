@@ -2,6 +2,10 @@
 importScripts('config.js');
 
 const PAUSE_MIN = 15000, PAUSE_EXTRA = 10000; // 15 to 25 s between groups
+const AUTO_HOURS = 24; // scan every group by itself once a day while Chrome is open
+
+chrome.runtime.onInstalled.addListener(() => chrome.alarms.create('auto', { periodInMinutes: 60 }));
+chrome.runtime.onStartup.addListener(() => chrome.alarms.create('auto', { periodInMinutes: 60 }));
 
 async function cfg() {
   const s = await chrome.storage.local.get(['server', 'token']);
@@ -26,6 +30,7 @@ async function startTour() {
   const { groups } = await api('/api/groups');
   if (!groups.length) throw new Error('No groups yet. Open facebook.com/groups/joins first.');
   const win = await chrome.windows.create({ url: 'about:blank', focused: false, width: 900, height: 900 });
+  await chrome.storage.local.set({ lastTourStart: Date.now() });
   await saveTour({ running: true, queue: groups.map((g) => g.id), total: groups.length, done: 0, newPosts: 0, windowId: win.id, tabId: win.tabs[0].id, current: null });
   next();
 }
@@ -53,6 +58,14 @@ async function stopTour(msg) {
 }
 
 chrome.alarms.onAlarm.addListener(async (a) => {
+  if (a.name === 'auto') {
+    const { lastTourStart, autoScan } = await chrome.storage.local.get(['lastTourStart', 'autoScan']);
+    const t = await tour();
+    if (autoScan === false || (t && t.running)) return;
+    if (!lastTourStart) return; // first scan is started by the person, so they see what happens
+    if (Date.now() - lastTourStart > AUTO_HOURS * 3600e3) startTour().catch(() => {});
+    return;
+  }
   if (a.name !== 'watchdog') return;
   const t = await tour();
   if (t && t.running) { t.done++; await saveTour(t); next(); }
@@ -86,6 +99,7 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
       return true;
     }
     if (msg.type === 'start') { await startTour(); return true; }
+    if (msg.type === 'import') { await chrome.tabs.create({ url: 'https://www.facebook.com/groups/joins/' }); return true; }
     if (msg.type === 'stop') { await stopTour('Stopped'); return true; }
     if (msg.type === 'status') return { tour: await tour(), ...(await chrome.storage.local.get(['lastCapture', 'lastResult'])) };
   })().then(reply, (e) => reply({ error: e.message }));

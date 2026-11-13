@@ -5,6 +5,7 @@
 declare(strict_types=1);
 
 const STATS_DAYS = 30;
+const STATS_PLUGIN_VERSION = '1.2.0';
 
 function stats_base(): string
 {
@@ -260,12 +261,12 @@ function stats_layout(string $title, array $data, string $body): void
     $flash = flash();
     echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
         . '<title>' . h($title) . ' | Facebook Stats</title><meta name="description" content="Member growth, activity and top posters across all your Facebook groups.">'
-        . '<link rel="icon" href="/assets/icon.svg"><link rel="stylesheet" href="/assets/app.css?v=1"><link rel="stylesheet" href="/assets/stats.css?v=1"></head><body>'
+        . '<link rel="icon" href="/assets/icon.svg"><link rel="stylesheet" href="/assets/app.css?v=1"><link rel="stylesheet" href="/assets/stats.css?v=2"></head><body>'
         . '<header class="top"><div class="wrap"><a class="brand" href="' . ($base ?: '/') . '"><img src="/assets/icon.svg" alt=""> Facebook Stats</a><nav></nav><div class="actions">' . $right . '</div></div></header><main class="wrap">';
     if ($flash) echo '<div class="flash">' . h($flash) . '</div>';
     if ($data['demo']) echo '<div class="card note demo-note"><b>Example data.</b> This is what the dashboard looks like with 12 groups. '
         . (is_admin() ? 'Your own numbers are on <a href="' . ($base ?: '/') . '">Your groups</a>.' : 'The owner logs in to see their own groups.') . '</div>';
-    echo $body . '</main><script src="/assets/stats.js?v=1"></script></body></html>';
+    echo $body . '</main><script src="/assets/stats.js?v=2"></script></body></html>';
 }
 
 function view_stats(?array $data): void
@@ -276,10 +277,7 @@ function view_stats(?array $data): void
     $days = $data['days'];
 
     if (!$groups) {
-        $out = '<div class="card"><h1>No groups yet</h1><p>Stats are collected by the browser extension while you use Facebook. '
-            . '<a href="https://facebookgroups.fullstackpartner.com/settings#extension">Install the extension</a> (version 1.1 or newer records member counts), '
-            . 'open <a href="https://www.facebook.com/groups/joins/" target="_blank" rel="noopener">facebook.com/groups/joins</a> to import your groups, then press <b>Scan all my groups</b>.</p>'
-            . '<p><a class="btn" href="' . $base . '/demo">See the example dashboard</a></p></div>';
+        $out = plugin_card(true) . '<p class="center"><a class="btn" href="' . $base . '/demo">See what it looks like with 12 groups</a></p>';
         stats_layout('Overview', $data, $out);
         return;
     }
@@ -301,7 +299,7 @@ function view_stats(?array $data): void
     $d30 = member_delta($totalSeries, STATS_DAYS - 1);
     $active = count(array_filter($groups, fn($g) => $g['posts7'] > 0));
 
-    $out = '<div class="head"><h1>All your groups</h1><span class="muted">Last ' . STATS_DAYS . ' days'
+    $out = plugin_card(false) . '<div class="head"><h1>All your groups</h1><span class="muted">Last ' . STATS_DAYS . ' days'
         . ($data['ext_last_seen'] ? ' · extension last seen ' . h(ago($data['ext_last_seen'])) : '') . '</span></div>';
     $out .= '<div class="tiles">'
         . tile('Groups', number_format(count($groups)), $active . ' active this week')
@@ -339,6 +337,29 @@ function view_stats(?array $data): void
 
     $out .= '<div class="grid2">' . authors_card($data['authors'], 'Top posters across your groups') . categories_card($data['categories']) . '</div>';
     stats_layout('Overview', $data, $out);
+}
+
+/**
+ * The Chrome plugin is the only way to read groups (Facebook has no groups API since 2024).
+ * stats.js shows #plugin-missing when the plugin's bridge.js is not on the page, otherwise #plugin-ok.
+ */
+function plugin_card(bool $noGroups): string
+{
+    return '<section class="card plugin" id="plugin" data-need="' . STATS_PLUGIN_VERSION . '"' . ($noGroups ? ' data-nogroups="1"' : '') . '>'
+        . '<div id="plugin-missing"' . ($noGroups ? '' : ' hidden') . '><div class="plugin-grid"><div>'
+        . '<h1>Install the Chrome plugin</h1>'
+        . '<p>Facebook does not let any website read groups, not even with Login with Facebook. A small Chrome plugin reads your groups while you are logged in to Facebook and sends the numbers here. It only reads: it never posts, likes or comments.</p>'
+        . '<ol class="steps">'
+        . '<li><a class="btn primary" href="/extension.zip">Download the plugin</a> and unzip it.</li>'
+        . '<li>Open <code>chrome://extensions</code>, turn on <b>Developer mode</b> (top right).</li>'
+        . '<li>Click <b>Load unpacked</b> and pick the unzipped folder.</li>'
+        . '<li>Come back to this page and press <b>Import my groups</b>, then <b>Scan now</b>.</li>'
+        . '</ol><p class="muted">After the first scan it updates by itself once a day while Chrome is open.</p></div>'
+        . '<video class="howto" src="/assets/howto.mp4" poster="/assets/howto.jpg" controls playsinline preload="none"></video></div></div>'
+        . '<div id="plugin-old" hidden><b>Your plugin is out of date.</b> <a href="/extension.zip">Download the new version</a>, remove the old one in <code>chrome://extensions</code> and load the new folder.</div>'
+        . '<div id="plugin-ok" hidden><div class="plugin-row"><span class="tag ok">Plugin installed</span> <span id="plugin-status" class="muted"></span>'
+        . '<span class="grow"></span><button id="btn-import" type="button">Import my groups</button><button id="btn-scan" type="button" class="primary">Scan now</button></div></div>'
+        . '</section>';
 }
 
 function authors_card(array $authors, string $title): string

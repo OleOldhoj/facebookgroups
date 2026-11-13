@@ -363,14 +363,14 @@ function send_extension_zip(): void
     $zip->open($tmp, ZipArchive::OVERWRITE);
     foreach (scandir($dir) as $f) {
         if ($f[0] === '.' || !is_file("$dir/$f")) continue;
-        $zip->addFile("$dir/$f", "facebookgroups-extension/$f");
+        $zip->addFile("$dir/$f", "facebook-stats-plugin/$f");
     }
-    $zip->addFromString('facebookgroups-extension/config.js',
+    $zip->addFromString('facebook-stats-plugin/config.js',
         'self.FBG_CONFIG = ' . json_encode(['server' => 'https://facebookstats.fullstackpartner.com', // valid own cert; facebookgroups. still waits for its SAN
              'token' => env('EXTENSION_TOKEN')], JSON_UNESCAPED_SLASHES) . ";\n");
     $zip->close();
     header('Content-Type: application/zip');
-    header('Content-Disposition: attachment; filename="facebookgroups-extension.zip"');
+    header('Content-Disposition: attachment; filename="facebook-stats-plugin.zip"');
     header('Content-Length: ' . filesize($tmp));
     readfile($tmp);
     unlink($tmp);

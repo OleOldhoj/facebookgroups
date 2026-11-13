@@ -46,3 +46,11 @@ table.sortable th.desc::after { content: " ↓"; }
 @media (max-width: 600px) { .tv { font-size: 1.4rem; } .tiles { grid-template-columns: 1fr 1fr; } }
 .card .table { border: 0; border-radius: 0; margin: 0 -18px -18px; }
 .card ol.hbars { padding-left: 0; margin-left: 0; }
+.plugin h1 { font-size: 1.4rem; }
+.plugin-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 760px) { .plugin-grid { grid-template-columns: 1fr; } }
+.steps { padding-left: 1.3em; } .steps li { margin: 8px 0; }
+.howto { width: 100%; border-radius: 10px; border: 1px solid var(--line); background: #000; aspect-ratio: 16 / 9; }
+.plugin-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.plugin-row .grow { flex: 1; }
+.center { text-align: center; }
