@@ -1,0 +1,26 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+  body { font: 14px system-ui, sans-serif; width: 300px; margin: 0; padding: 14px; color: #1b2230; }
+  h1 { font-size: 15px; margin: 0 0 10px; }
+  button { width: 100%; padding: 9px; border-radius: 8px; border: 0; background: #1877f2; color: #fff; font: inherit; cursor: pointer; margin-bottom: 8px; }
+  button.secondary { background: #e7f0fe; color: #1877f2; }
+  p { margin: 6px 0; color: #4b5466; }
+  details { margin-top: 10px; } input { width: 100%; box-sizing: border-box; margin: 3px 0 8px; padding: 6px; }
+  #status { min-height: 20px; }
+</style></head>
+<body>
+  <h1>Facebook Groups dashboard</h1>
+  <p id="status">Loading...</p>
+  <button id="start">Scan all my groups</button>
+  <button id="stop" class="secondary" hidden>Stop scan</button>
+  <button id="open" class="secondary">Open dashboard</button>
+  <p>A small window opens and visits each group, one every 15 to 25 seconds. Leave it open until it closes by itself.</p>
+  <details><summary>Connection</summary>
+    <label>Server<input id="server"></label>
+    <label>Key<input id="token"></label>
+    <button id="save" class="secondary">Save</button>
+  </details>
+  <script src="config.js"></script>
+  <script src="popup.js"></script>
+</body></html>
