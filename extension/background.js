@@ -116,7 +116,13 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
     }
     if (msg.type === 'start') { await startTour(); return true; }
     if (msg.type === 'stop') { await stopTour('Stopped'); return true; }
-    if (msg.type === 'status') return { tour: await tour(), ...(await chrome.storage.local.get(['lastCapture', 'lastResult'])) };
+    if (msg.type === 'status') return { tour: await tour(), paired: !!(await cfg()).token, ...(await chrome.storage.local.get(['lastCapture', 'lastResult'])) };
+    if (msg.type === 'pair') {
+      // Only bridge.js on the dashboard's own site sends this.
+      if (!sender.url || !sender.url.startsWith(FBG_CONFIG.server + '/') || !/^[\w-]{16,200}$/.test(msg.token)) return false;
+      await chrome.storage.local.set({ token: msg.token, server: FBG_CONFIG.server });
+      return true;
+    }
   })().then(reply, (e) => reply({ error: e.message }));
   return true;
 });

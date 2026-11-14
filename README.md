@@ -21,3 +21,12 @@ Own LE cert (webroot), nginx `conf.d/facebookstats.fullstackpartner.com.conf`.
 Pages (plugin 1.3): the scan first visits groups/joins and pages/?category=your_pages + ?category=liked, then every group and page
 from `/api/targets`, oldest scan first. Page header gives followers + likes -> `tracked_pages` + `page_stats` (one row per day).
 Page ids: lower-case username or `id:<number>`. Only pages found in those lists are tracked; random profile visits are ignored.
+
+## Install the plugin
+
+- **Chrome Web Store** (one click, once approved): the link appears as an "Add to Chrome" button on facebookstats.fullstackpartner.com.
+- **Without the store:** download `facebook-stats-plugin-<version>.zip` from the [latest release](https://github.com/OleOldhoj/facebookgroups/releases/latest),
+  unzip it, open `chrome://extensions`, turn on Developer mode, click Load unpacked and pick the folder.
+  Then open facebookstats.fullstackpartner.com, log in, and the plugin connects by itself.
+
+Build the zip: `bin/build-plugin.sh`. Store listing text, screenshots and promo tile: `store/`.

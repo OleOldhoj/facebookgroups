@@ -5,7 +5,7 @@
 declare(strict_types=1);
 
 const STATS_DAYS = 30;
-const STATS_PLUGIN_VERSION = '1.3.0';
+const STATS_PLUGIN_VERSION = '1.4.0';
 
 function stats_base(): string
 {
@@ -296,12 +296,12 @@ function stats_layout(string $title, array $data, string $body): void
     $flash = flash();
     echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
         . '<title>' . h($title) . ' | Facebook Stats</title><meta name="description" content="Member growth, activity and top posters across all your Facebook groups.">'
-        . '<link rel="icon" href="/assets/icon.svg"><link rel="stylesheet" href="/assets/app.css?v=1"><link rel="stylesheet" href="/assets/stats.css?v=3"></head><body>'
+        . '<link rel="icon" href="/assets/icon.svg"><link rel="stylesheet" href="/assets/app.css?v=1"><link rel="stylesheet" href="/assets/stats.css?v=5"></head><body>'
         . '<header class="top"><div class="wrap"><a class="brand" href="' . ($base ?: '/') . '"><img src="/assets/icon.svg" alt=""> Facebook Stats</a><nav></nav><div class="actions">' . $right . '</div></div></header><main class="wrap">';
     if ($flash) echo '<div class="flash">' . h($flash) . '</div>';
     if ($data['demo']) echo '<div class="card note demo-note"><b>Example data.</b> This is what the dashboard looks like with 12 groups and 8 pages. '
         . (is_admin() ? 'Your own numbers are on <a href="' . ($base ?: '/') . '">Your groups</a>.' : 'The owner logs in to see their own groups.') . '</div>';
-    echo $body . '</main><script src="/assets/stats.js?v=3"></script></body></html>';
+    echo $body . '</main><script src="/assets/stats.js?v=4"></script></body></html>';
 }
 
 function view_stats(?array $data): void
@@ -344,13 +344,13 @@ function view_stats(?array $data): void
     $followers = array_sum(array_map(fn($pg) => (int)$pg['followers'], $pages));
     $own = count(array_filter($pages, fn($pg) => $pg['kind'] === 'own'));
 
-    $out = plugin_card(false) . '<div class="head"><h1>All your groups and pages</h1><span class="muted">Last ' . STATS_DAYS . ' days'
+    $out = ($data['demo'] ? '' : plugin_card(false)) . '<div class="head"><h1>All your groups and pages</h1><span class="muted">Last ' . STATS_DAYS . ' days'
         . ($data['ext_last_seen'] ? ' · extension last seen ' . h(ago($data['ext_last_seen'])) : '') . '</span></div>';
     $out .= '<div class="tiles">'
         . tile('Groups', number_format(count($groups)), $active . ' active this week')
         . tile('Members, all groups', $known ? fmt_n($members) : '–', $known ? fmt_delta($d30) . ' in 30 days' : 'not recorded yet')
         . tile('Posts this week', number_format($p7), $prev7 ? fmt_delta($p7 - $prev7) . ' vs last week' : 'last 7 days')
-        . tile('Leads found', number_format($leads), 'AI: lead or opportunity')
+        . tile('Leads found', number_format($leads), 'posts flagged by AI')
         . tile('Pages', number_format(count($pages)), $own . ' yours, ' . (count($pages) - $own) . ' followed')
         . tile('Followers, all pages', $followers ? fmt_n($followers) : '–', $followers ? fmt_delta(member_delta($fSeries, STATS_DAYS - 1)) . ' in 30 days' : 'not recorded yet')
         . '</div>';
@@ -457,17 +457,27 @@ function plugin_card(bool $noGroups): string
         . '<div id="plugin-missing"' . ($noGroups ? '' : ' hidden') . '><div class="plugin-grid"><div>'
         . '<h1>Install the Chrome plugin</h1>'
         . '<p>Facebook does not let any website read groups, not even with Login with Facebook. A small Chrome plugin reads your groups and pages while you are logged in to Facebook and sends the numbers here. It only reads: it never posts, likes or comments.</p>'
-        . '<ol class="steps">'
-        . '<li><a class="btn primary" href="/extension.zip">Download the plugin</a> and unzip it.</li>'
-        . '<li>Open <code>chrome://extensions</code>, turn on <b>Developer mode</b> (top right).</li>'
-        . '<li>Click <b>Load unpacked</b> and pick the unzipped folder.</li>'
-        . '<li>Come back to this page and press <b>Scan now</b>. It finds all your groups and pages by itself.</li>'
-        . '</ol><p class="muted">After the first scan it updates by itself once a day while Chrome is open.</p></div>'
+        . (($store = conf('CHROME_STORE_URL')) !== ''
+            ? '<p><a class="btn primary big" href="' . h($store) . '" target="_blank" rel="noopener">Add to Chrome</a></p>'
+              . '<ol class="steps"><li>Click <b>Add to Chrome</b>, then <b>Add extension</b>.</li><li>Come back to this page. The plugin connects to your account by itself.</li>'
+              . '<li>Press <b>Scan now</b>. It finds all your groups and pages.</li></ol>'
+              . '<details><summary class="muted">Install without the Chrome Web Store</summary>' . plugin_manual_steps() . '</details>'
+            : plugin_manual_steps())
+        . '<p class="muted">After the first scan it updates by itself once a day while Chrome is open.</p></div>'
         . '<video class="howto" src="/assets/howto.mp4?v=2" poster="/assets/howto.jpg?v=2" controls playsinline preload="none"></video></div></div>'
         . '<div id="plugin-old" hidden><b>Your plugin is out of date.</b> <a href="/extension.zip">Download the new version</a>, remove the old one in <code>chrome://extensions</code> and load the new folder.</div>'
         . '<div id="plugin-ok" hidden><div class="plugin-row"><span class="tag ok">Plugin installed</span> <span id="plugin-status" class="muted"></span>'
         . '<span class="grow"></span><button id="btn-scan" type="button" class="primary">Scan now</button></div></div>'
         . '</section>';
+}
+
+function plugin_manual_steps(): string
+{
+    return '<ol class="steps">'
+        . '<li><a class="btn primary" href="/extension.zip">Download the plugin</a> and unzip it.</li>'
+        . '<li>Open <code>chrome://extensions</code>, turn on <b>Developer mode</b> (top right).</li>'
+        . '<li>Click <b>Load unpacked</b> and pick the unzipped folder.</li>'
+        . '<li>Come back to this page and press <b>Scan now</b>. It finds all your groups and pages by itself.</li></ol>';
 }
 
 function authors_card(array $authors, string $title, bool $plus = false): string

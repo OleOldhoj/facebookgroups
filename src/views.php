@@ -345,6 +345,7 @@ function view_settings(): void
         . '<li>In Chrome (or Edge/Brave) open <code>chrome://extensions</code>, turn on <b>Developer mode</b>, click <b>Load unpacked</b> and pick the unzipped folder.</li>'
         . '<li>Open <a href="https://www.facebook.com/groups/joins/" target="_blank" rel="noopener">facebook.com/groups/joins</a> once. Your groups are imported.</li>'
         . '<li>Click the extension icon and press <b>Scan all my groups</b>. A small window opens and visits each group, about one every 20 seconds, then closes again. Run it whenever you want an update.</li></ol>'
+        . '<form method="post" action="/settings">' . hidden_csrf() . '<label>Chrome Web Store link (once the plugin is approved)<input name="CHROME_STORE_URL" placeholder="https://chromewebstore.google.com/detail/..." value="' . h(setting('CHROME_STORE_URL')) . '"></label><button>Save</button></form>'
         . '<p class="muted">Key: <code>' . $token . '</code></p>'
         . '<p class="muted">Pace is kept slow on purpose: Facebook can lock accounts that load pages very fast.</p></div>';
 

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "Facebook Stats",
-  "version": "1.3.0",
+  "name": "Group & Page Stats for Facebook",
+  "version": "1.4.0",
   "description": "Reads your Facebook groups and pages (members, followers, new posts) and sends the numbers to facebookstats.fullstackpartner.com. Read only.",
   "permissions": [
     "storage",
@@ -38,7 +38,7 @@
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Facebook Stats",
+    "default_title": "Group & Page Stats for Facebook",
     "default_icon": {
       "16": "icon16.png",
       "48": "icon48.png"

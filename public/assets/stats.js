@@ -23,6 +23,7 @@ document.querySelectorAll('table.sortable').forEach((t) => {
   const $ = (id) => document.getElementById(id);
   const newer = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); return false; };
   const send = (type) => window.postMessage({ from: 'fbg-page', type }, location.origin);
+  let paired = false;
   function show() {
     const v = document.documentElement.dataset.fbgExt;
     $('plugin-missing').hidden = !!v;
@@ -34,11 +35,16 @@ document.querySelectorAll('table.sortable').forEach((t) => {
     if (e.source !== window || !e.data || e.data.from !== 'fbg-ext') return;
     show();
     if (e.data.type === 'started' && e.data.error) $('plugin-status').textContent = e.data.error;
+    if (e.data.type === 'status' && e.data.status && e.data.status.paired === false && !paired) {
+      paired = true; // ask once per page view
+      fetch('/plugin/token', { credentials: 'same-origin' }).then((r) => r.ok ? r.json() : null)
+        .then((j) => j && j.token && window.postMessage({ from: 'fbg-page', type: 'pair', token: j.token }, location.origin)).catch(() => {});
+    }
     if (e.data.type === 'status' && e.data.status) {
       const t = e.data.status.tour, last = e.data.status.lastCapture;
       $('btn-scan').disabled = !!(t && t.running);
       $('plugin-status').textContent = t && t.running ? `Visiting ${t.done + 1} of ${t.total}, ${t.newPosts} new posts so far. Reload the page when it is done.`
-        : t && t.last ? t.last : last ? 'Last data sent ' + new Date(last).toLocaleString() : 'No data sent yet.';
+        : t && t.last ? t.last : !e.data.status.paired ? 'Connecting to your account...' : last ? 'Last data sent ' + new Date(last).toLocaleString() : 'Connected. Press Scan now.';
     }
   });
   $('btn-scan').onclick = () => { $('plugin-status').textContent = 'Starting...'; send('scan'); };

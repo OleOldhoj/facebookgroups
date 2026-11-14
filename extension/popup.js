@@ -9,6 +9,7 @@ async function refresh() {
   let txt = 'Ready.';
   if (t && t.running) txt = `Visiting ${t.done + 1} of ${t.total} (${t.newPosts} new posts so far)`;
   else if (t && t.last) txt = t.last;
+  else if (!s.paired) txt = 'Not connected yet: open your stats page and log in, it connects by itself.';
   else if (s.lastCapture) txt = 'Last capture ' + new Date(s.lastCapture).toLocaleTimeString();
   $('status').textContent = txt;
 }

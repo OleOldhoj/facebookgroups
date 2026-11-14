@@ -97,10 +97,14 @@ if (str_starts_with($path, '/api/')) {
 
 if ($path === '/privacy') {
     header('Content-Type: text/html; charset=utf-8');
-    echo '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Privacy | Facebook Groups</title><link rel="stylesheet" href="/assets/app.css?v=1">'
-        . '<main class="wrap"><div class="card"><h1>Privacy policy</h1><p>This is a private dashboard used by one person (the site owner) to manage their own Facebook pages and read the groups they are a member of. '
-        . 'It stores page names, page access tokens and posts from those pages and groups on a server in Germany, only to show them to the owner and to have them summarised by an AI model (Anthropic Claude). '
-        . 'Nothing is sold or shared with anyone else. To have data removed, email ole.oldhoj@gmail.com.</p></div></main>';
+    echo '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Privacy | Facebook Stats</title><link rel="stylesheet" href="/assets/app.css?v=1">'
+        . '<main class="wrap"><div class="card"><h1>Privacy policy</h1>'
+        . '<p>Facebook Stats (facebookstats.fullstackpartner.com, the Facebook Groups dashboard and the Facebook Stats Chrome plugin) is used by one person, the site owner, to follow their own Facebook groups and pages.</p>'
+        . '<h2>What the plugin reads</h2><p>Only while you are logged in to Facebook in Chrome, and only on facebook.com: the names and addresses of the groups you are a member of and the pages you run or like, '
+        . 'the member count of each group, the follower and like counts of each page, and the text and author name of group posts shown on screen. It never posts, likes, comments or sends messages, and it does not read private messages, passwords or anything outside facebook.com.</p>'
+        . '<h2>Where it goes</h2><p>The plugin sends this only to facebookstats.fullstackpartner.com, a server in Germany, using a key that belongs to the owner\'s account. '
+        . 'It is stored there to draw the statistics and, if the owner turns it on, to have posts summarised by an AI model (Anthropic Claude). Nothing is sold, shared or used for advertising.</p>'
+        . '<h2>Removing data</h2><p>Remove the plugin in chrome://extensions to stop all collection. To have stored data deleted, email ole.oldhoj@gmail.com.</p></div></main>';
     exit;
 }
 
@@ -132,6 +136,13 @@ if (is_stats_host() || $path === '/stats' || str_starts_with($path, '/stats/')) 
         elseif (is_admin()) view_stats_group($m[1], null);
         else redirect('/login');
         exit;
+    }
+    if ($sub === '/plugin/token') {
+        // The installed plugin picks up the owner's key here (same-origin fetch from stats.js, session login required).
+        header('Content-Type: application/json');
+        header('Cache-Control: no-store');
+        if (!is_admin()) { http_response_code(401); exit('{"error":"log in"}'); }
+        exit(json_encode(['token' => env('EXTENSION_TOKEN')]));
     }
     if (preg_match('#^/page/([\w.:%\-]+)$#', $sub, $m)) {
         $pid = rawurldecode($m[1]);
@@ -271,6 +282,10 @@ try {
             foreach (['FB_APP_ID', 'FB_APP_SECRET', 'ANTHROPIC_API_KEY'] as $k) {
                 $v = trim((string)($_POST[$k] ?? ''));
                 if ($v !== '') set_setting($k, $v);          // blank = keep the saved value
+            }
+            if (isset($_POST['CHROME_STORE_URL'])) {
+                $u = trim((string)$_POST['CHROME_STORE_URL']);
+                if ($u === '' || preg_match('#^https://chrome(webstore)?\.google\.com/#', $u)) set_setting('CHROME_STORE_URL', $u ?: null);
             }
             if (isset($_POST['AI_MODEL'])) set_setting('AI_MODEL', trim((string)$_POST['AI_MODEL']) ?: null);
             if (isset($_POST['ai_instructions'])) set_setting('ai_instructions', trim(str_replace('—', ', ', (string)$_POST['ai_instructions'])) ?: null);

@@ -13,4 +13,6 @@ return [
     // Claude API key for the AI review. Can also be set on the Settings page.
     'ANTHROPIC_API_KEY' => '',
     'AI_MODEL' => 'claude-haiku-5-5',
+    // Chrome Web Store link of the plugin, once approved. Can also be set on the Settings page.
+    'CHROME_STORE_URL' => '',
 ];

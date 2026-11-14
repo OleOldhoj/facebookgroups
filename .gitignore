@@ -1,3 +1,4 @@
 env.php
 .codegraph/
 graphify-out/
+dist/
